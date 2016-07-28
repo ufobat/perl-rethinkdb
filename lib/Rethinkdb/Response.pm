@@ -12,47 +12,8 @@ sub _init {
   my $optargs = shift || {};
   my $args    = { type => $data->{t}, token => $data->{token}, };
 
-  my $types = {
-    1  => 'success_atom',
-    2  => 'success_sequence',
-    3  => 'success_partial',
-    4  => 'wait_complete',
-    16 => 'client_error',
-    17 => 'compile_error',
-    18 => 'runtime_error',
-  };
 
-  $args->{type_description} = $types->{ $data->{t} };
-
-  my $response = [];
-  if ( $data->{r} ) {
-    foreach ( @{ $data->{r} } ) {
-      push @{$response}, $_;
-    }
-  }
-
-  # not sure about this:
-  if ( $data->{t} == 1 ) {
-    $response = $response->[0];
-  }
-
-  # group the data into a hash
-  if ( !($optargs->{group_format} && $optargs->{group_format} eq 'raw') ) {
-    if ( ref $response eq 'HASH'
-      && $response->{'$reql_type$'}
-      && $response->{'$reql_type$'} eq 'GROUPED_DATA' )
-    {
-      my $group = {};
-
-      foreach ( @{ $response->{data} } ) {
-        $group->{ $_->[0] } = $_->[1];
-      }
-
-      $response = $group;
-    }
-  }
-
-  $args->{response} = $response;
+  $args->{response} = _data_to_response($data, $optargs);
 
   if ( $data->{b} ) {
     $args->{backtrace} = $data->{b};
@@ -66,7 +27,82 @@ sub _init {
     $args->{error_type} = $data->{e};
   }
 
-  return $class->new($args);
+  my $object = $class->new($args);
+  $object->_set_type($data->{t});
+  return $object;
+}
+
+sub _data_to_response {
+    my $data = shift;
+    my $optargs = shift;
+
+    my $response = [];
+    if ($data->{r}) {
+        foreach (@{$data->{r}}) {
+            push @{$response}, $_;
+        }
+    }
+
+    # not sure about this:
+    if ($data->{t} == 1) {
+        $response = $response->[0];
+    }
+
+    # group the data into a hash
+    if (!($optargs->{group_format} && $optargs->{group_format} eq 'raw')) {
+        if (   ref $response eq 'HASH'
+            && $response->{'$reql_type$'}
+            && $response->{'$reql_type$'} eq 'GROUPED_DATA')
+        {
+            my $group = {};
+
+            foreach (@{$response->{data}}) {
+                $group->{$_->[0]} = $_->[1];
+            }
+
+            $response = $group;
+        }
+    }
+
+    return $response;
+
+}
+
+sub _set_type {
+    my $self = shift;
+    my $type = shift;
+
+    my $types = {
+        1  => 'success_atom',
+        2  => 'success_sequence',
+        3  => 'success_partial',
+        4  => 'wait_complete',
+        16 => 'client_error',
+        17 => 'compile_error',
+        18 => 'runtime_error',
+    };
+
+    $self->type($type);
+    $self->type_description( $types->{$type} );
+}
+
+sub _append {
+    my $self    = shift;
+    my $data    = shift;
+    my $optargs = shift || {};
+
+    my $new_response = _data_to_response($data, $optargs);
+    my $old_response = $self->response;
+
+    if (ref($new_response) eq "HASH") {
+        foreach (keys %$new_response) {
+            $old_response->{$_} = $new_response->{$_};
+        }
+    } else {
+        push @$old_response, @$new_response;
+    }
+    $self->response($old_response);
+    $self->type($data->{t});
 }
 
 1;

@@ -123,7 +123,7 @@ sub run {
   my $self = shift;
   my ( $connection, $args, $callback ) = @_;
 
-  if ( ref $connection ne 'Rethinkdb::IO' ) {
+  if ( not $connection->isa('Rethinkdb::IO') ) {
     $callback = $args;
     $args     = $connection;
     if ( $self->_rdb && $self->_rdb->io ) {

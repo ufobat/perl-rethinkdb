@@ -4,7 +4,8 @@ use Rethinkdb::Base -base;
 use Carp 'croak';
 use Scalar::Util 'weaken';
 
-use Rethinkdb::IO;
+use Rethinkdb::IO::Async;
+use Rethinkdb::IO::Sync;
 use Rethinkdb::Protocol;
 use Rethinkdb::Query::Database;
 use Rethinkdb::Query::Table;
@@ -16,6 +17,7 @@ our $VERSION = '0.14';
 # this is set only when connect->repl()
 has 'io';
 has 'term' => sub { Rethinkdb::Protocol->new->term; };
+has 'use_sync' => '0';
 
 sub import {
   my $class   = shift;
@@ -29,16 +31,17 @@ sub import {
 
 sub r {
   my $package = caller || 'main';
+  my $args = shift || {};
   my $self;
 
-  no strict "refs";
+  no strict 'refs';
   my $_rdb_io = ${$package . '::_rdb_io'};
   if ($_rdb_io) {
-    $self = __PACKAGE__->new( io => $_rdb_io );
+    $self = __PACKAGE__->new( io => $_rdb_io, %$args );
     $self->io->_rdb($self);
   }
   else {
-    $self = __PACKAGE__->new;
+    $self = __PACKAGE__->new(%$args);
   }
 
   return $self;
@@ -51,24 +54,27 @@ sub connect {
   my $db       = shift || 'test';
   my $auth_key = shift || '';
   my $timeout  = shift || 20;
+  my $args     = shift || {};
 
-  my $io = Rethinkdb::IO->new(
+  my $class = $self->use_sync ? "Rethinkdb::IO::Sync" : "Rethinkdb::IO::Async";
+  my $io = $class->new(
     _rdb       => $self,
     host       => $host,
     port       => $port,
     default_db => $db,
     auth_key   => $auth_key,
-    timeout    => $timeout
+    timeout    => $timeout,
+    args       => $args,
   );
 
   weaken $io->{_rdb};
-  return $io->connect;
+  return $io->connect();
 }
 
 sub server {
   my $self = shift;
 
-  return $self->io->server;
+  return $self->io->server(@_);
 }
 
 # DATABASES
